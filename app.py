@@ -67,6 +67,13 @@ div[data-baseweb="select"] *, div[data-baseweb="input"] input {{ color: {INK} !i
 .stDownloadButton button:hover {{ background: {GOLD}; color: {INK} !important; border-color: {INK}; }}
 div[data-testid="stDataFrame"] {{ border: 1px solid {GOLD}; }}
 .verdict {{ background: #fffdf5; border: 1px dashed {GREEN}; border-radius: 4px; padding: 12px 16px; }}
+/* Keep emoji and symbol glyphs out of serif-only rendering, which mis-measures their width. */
+.stApp p, .stApp span, .stApp label, .stApp summary, .stApp button {{
+  font-family: Georgia, 'Times New Roman', 'Segoe UI Emoji', 'Apple Color Emoji',
+               'Noto Color Emoji', serif;
+}}
+details summary {{ padding: 6px 2px; }}
+details summary p {{ display: inline; }}
 footer {{ visibility: hidden; }}
 </style>
 """, unsafe_allow_html=True)
@@ -300,6 +307,18 @@ with tab_pair:
                       margin=dict(t=40))
     st.plotly_chart(fig, use_container_width=True)
 
+    # ---- event notes for the sample, opened on demand
+    if show_events:
+        shown = [(d, t, w, i) for d, t, w, i in EVENTS
+                 if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max()]
+        if shown:
+            with st.expander(f"Event notes for this sample ({len(shown)} events)", expanded=False):
+                for d, t, w, i in shown:
+                    st.markdown(f"**{t}** — {pd.Timestamp(d + '-01'):%B %Y}")
+                    st.markdown(f"*What happened.* {w}")
+                    st.markdown(f"*Effect on the real exchange rate.* {i}")
+                    st.divider()
+
     m1, m2, m3 = st.columns(3)
     m1.metric("RER* (average RER)", f"{rer_star:,.4f}")
     m2.metric("Valid months", len(sub))
@@ -480,18 +499,6 @@ predict future moves. Change the sample dates and this figure changes.</span>
     st.download_button("Download CSV", out.to_csv(index=False).encode(),
                        file_name="rer_data.csv", mime="text/csv")
 
-    # ---- event notes for the sample, opened on demand
-    if show_events:
-        shown = [(d, t, w, i) for d, t, w, i in EVENTS
-                 if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max()]
-        if shown:
-            with st.expander(f"📜 Event notes for this sample ({len(shown)} events)", expanded=False):
-                for d, t, w, i in shown:
-                    st.markdown(f"**{t}** — {pd.Timestamp(d + '-01'):%B %Y}")
-                    st.markdown(f"*What happened.* {w}")
-                    st.markdown(f"*Effect on the real exchange rate.* {i}")
-                    st.divider()
-
 # ---------------------------------------------------------------- rank tab
 with tab_rank:
     st.markdown(
@@ -544,4 +551,3 @@ with tab_rank:
         st.dataframe(rk, use_container_width=True)
         st.download_button("Download ranking CSV", rk.to_csv().encode(),
                            file_name="rer_ranking.csv", mime="text/csv")
-
