@@ -78,7 +78,7 @@ footer {{ visibility: hidden; }}
 </style>
 """, unsafe_allow_html=True)
 
-BASE = "[api.imf.org](https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA)"
+BASE = "https" + "://" + "api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA"
 HEADERS = {"Accept": "text/csv"}
 CPI_KEY = "{}.CPI._T.IX.M"
 FX_KEY = "{}.XDC_USD.PA_RT.M"
