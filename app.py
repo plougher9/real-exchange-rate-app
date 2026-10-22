@@ -218,7 +218,6 @@ inv = 1 / sub["RER"]
 sub["Real_Index_C2"] = 100 * inv / inv.mean()
 latest = sub.iloc[-1]
 latest_idx2 = float(latest["Real_Index_C2"])
-
 tab_pair, tab_rank = st.tabs(["Pair analysis", "Rank view"])
 
 # ---------------------------------------------------------------- pair tab
@@ -342,6 +341,13 @@ with tab_pair:
 .notch { width:80px; height:20px; background:#1c1c1e; border-radius:12px; margin:-22px auto 16px; }
 .avatar { width:74px; height:74px; border-radius:50%; background:#8e8e93; margin:8px auto; font-size:40px;
   line-height:74px; animation:pulse 1.3s infinite; }
+.verdictbox { background:#fffdf5; border:1px solid #b8892b; border-left:8px solid #2f6b4f;
+  border-radius:4px; padding:14px 18px; margin-top:14px; box-shadow:2px 3px 0 rgba(31,58,46,.15); }
+.vtag { display:inline-block; padding:3px 12px; border-radius:12px; font-weight:700;
+  font-size:.85rem; letter-spacing:.5px; margin-bottom:8px; }
+.vbad { background:#a63d2f; color:#fffdf5; }
+.vgood { background:#2f6b4f; color:#fffdf5; }
+.vflat { background:#b8892b; color:#2b2110; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -378,6 +384,14 @@ with tab_pair:
             st.session_state.call_state = "ringing"
             st.session_state.offer = random.choice(range(500, 1501, 50))
             st.rerun()
+
+        # Who holds the base currency? Flips the direction of the verdict.
+        buyer = st.radio(
+            "Who is doing the buying?", [f"I hold {n1} currency", f"I hold {n2} currency"],
+            horizontal=True,
+            help=f"The offer is priced in {n1} currency. Pick which currency you are spending to "
+                 f"decide whether the current exchange rate works in your favour.")
+
         cost_now = offer * s_now
         cost_fair = offer * s_fair
         diff = (cost_now / cost_fair - 1) * 100
@@ -386,11 +400,47 @@ with tab_pair:
         c_b.metric(f"Cost in {n2} currency (today's rate)", f"{cost_now:,.2f}")
         c_c.metric(f"Cost in {n2} currency (avg real rate)", f"{cost_fair:,.2f}",
                    delta=f"{diff:+.1f}% today vs average", delta_color="inverse")
+
+        # The same number reads in opposite directions depending on who is buying.
+        holds_c1 = buyer.startswith("I hold")
+        gap_for_buyer = diff if holds_c1 else -diff
+        if abs(diff) < 1:
+            tag, cls = "NO CLEAR SIGNAL", "vflat"
+            line = (f"The real rate is within 1% of its sample average, so converting now is neither "
+                    f"unusually good nor unusually bad.")
+        elif holds_c1:
+            if gap_for_buyer < 0:
+                tag, cls = "BAD MOMENT TO CONVERT", "vbad"
+            else:
+                tag, cls = "GOOD MOMENT TO CONVERT", "vgood"
+            line = (f"Holding {n1} currency and buying {n2} currency, your money buys "
+                    f"<b>{abs(gap_for_buyer):.1f}% {'less' if gap_for_buyer < 0 else 'more'}</b> "
+                    f"in {n2} than it usually does over this sample.")
+        else:
+            if gap_for_buyer < 0:
+                tag, cls = "GOOD MOMENT", "vgood"
+            else:
+                tag, cls = "BAD MOMENT", "vbad"
+            line = (f"Holding {n2} currency, this {n1} priced item costs you "
+                    f"<b>{abs(gap_for_buyer):.1f}% {'less' if gap_for_buyer < 0 else 'more'}</b> "
+                    f"than usual over this sample.")
+
+        st.markdown(
+            f"""<div class="verdictbox">
+<span class="vtag {cls}">{tag}</span><br>
+{line}<br><br>
+<b>Buying power check:</b> {offer:,.0f} {n1} buys <b>{cost_now:,.2f} {n2}</b> today, against a
+sample-average {cost_fair:,.2f} {n2} ({diff:+.1f}%).<br>
+<span style="font-size:.85rem;opacity:.8;">This compares today's price with the average over your
+selected sample ({s_date:%Y-%m} to {e_date:%Y-%m}), not with an equilibrium value, and it does not
+predict future moves. Change the sample dates and this figure changes.</span>
+</div>""",
+            unsafe_allow_html=True,
+        )
         st.caption(
             f"Converted with S = {s_now:,.4f} {n2} per {n1} (latest month, {latest.name:%b %Y}). "
             f"The 'average real rate' is the exchange rate that would make the RER equal its sample "
             f"average, S = {s_fair:,.4f}. Prices are illustrative, not actual Apple pricing.")
-
     # ---- table + CSV
     out = sub.reset_index().rename(columns={"index": "date"})
     out["date"] = out["date"].dt.strftime("%Y-%m")
@@ -454,4 +504,3 @@ with tab_rank:
         st.dataframe(rk, use_container_width=True)
         st.download_button("Download ranking CSV", rk.to_csv().encode(),
                            file_name="rer_ranking.csv", mime="text/csv")
-
