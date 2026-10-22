@@ -67,16 +67,23 @@ div[data-baseweb="select"] *, div[data-baseweb="input"] input {{ color: {INK} !i
 .stDownloadButton button:hover {{ background: {GOLD}; color: {INK} !important; border-color: {INK}; }}
 div[data-testid="stDataFrame"] {{ border: 1px solid {GOLD}; }}
 .verdict {{ background: #fffdf5; border: 1px dashed {GREEN}; border-radius: 4px; padding: 12px 16px; }}
-/* Keep emoji and symbol glyphs out of serif-only rendering, which mis-measures their width. */
-.stApp p, .stApp span, .stApp label, .stApp summary, .stApp button {{
+/* Emoji fallback: scoped to the headings/lede only, so widget internals keep their own layout. */
+.hero h1, .hero .sub, h2, h3 {{
   font-family: Georgia, 'Times New Roman', 'Segoe UI Emoji', 'Apple Color Emoji',
                'Noto Color Emoji', serif;
 }}
-details summary {{ padding: 6px 2px; }}
-details summary p {{ display: inline; }}
-footer {{ visibility: hidden; }}
-</style>
-""", unsafe_allow_html=True)
+/* Expander header: give it room and stop inherited positioning from colliding with the label. */
+div[data-testid="stExpander"] summary {{
+  font-family: Georgia, 'Times New Roman', serif;
+  padding: 10px 4px;
+  overflow: visible;
+}}
+div[data-testid="stExpander"] summary p,
+div[data-testid="stExpander"] summary span {{
+  font-family: Georgia, 'Times New Roman', serif;
+  position: static;
+  margin: 0;
+}}
 
 BASE = "https" + "://" + "api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA"
 HEADERS = {"Accept": "text/csv"}
