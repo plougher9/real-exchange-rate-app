@@ -218,8 +218,8 @@ inv = 1 / sub["RER"]
 sub["Real_Index_C2"] = 100 * inv / inv.mean()
 latest = sub.iloc[-1]
 latest_idx2 = float(latest["Real_Index_C2"])
-tab_pair, tab_rank = st.tabs(["Pair analysis", "Rank view"])
 
+tab_pair, tab_rank = st.tabs(["Pair analysis", "Rank view"])
 # ---------------------------------------------------------------- pair tab
 with tab_pair:
     view = st.radio("Chart", ["Real", "Nominal", "Both"], horizontal=True)
@@ -402,7 +402,7 @@ with tab_pair:
                    delta=f"{diff:+.1f}% today vs average", delta_color="inverse")
 
         # The same number reads in opposite directions depending on who is buying.
-        holds_c1 = buyer.startswith("I hold")
+        holds_c1 = buyer == f"I hold {n1} currency"
         gap_for_buyer = diff if holds_c1 else -diff
         if abs(diff) < 1:
             tag, cls = "NO CLEAR SIGNAL", "vflat"
