@@ -245,6 +245,7 @@ latest = sub.iloc[-1]
 latest_idx2 = float(latest["Real_Index_C2"])
 
 tab_pair, tab_rank = st.tabs(["Pair analysis", "Rank view"])
+
 # ---------------------------------------------------------------- pair tab
 with tab_pair:
     view = st.radio("Chart", ["Real", "Nominal", "Both"], horizontal=True)
@@ -263,7 +264,6 @@ with tab_pair:
                                 "selected sample. The gap between it and 100 is the effect of your "
                                 "date choice on the benchmark.")
     cur1, cur2 = f"{n1} currency", f"{n2} currency"
-
     fig = make_subplots(specs=[[{"secondary_y": view == "Both"}]])
     if view in ("Real", "Both"):
         if persp in (f"{n1}", "Both currencies"):
@@ -328,23 +328,48 @@ with tab_pair:
                                   on_select="rerun", key="rer_chart",
                                   selection_mode=("points",))
 
-    # ---- click a diamond to read the event history
-    clicked = (event_chart or {}).get("selection", {}).get("points", []) if isinstance(event_chart, dict) else []
-    if show_events and clicked:
-        ci = clicked[0].get("curve_number", clicked[0].get("curveNumber"))
+    # ---- clicked event: match on the clicked point's DATE (no trace-index guessing)
+    clicked_pts = []
+    if isinstance(event_chart, dict):
+        clicked_pts = (event_chart.get("selection") or {}).get("points") or []
+
+    hit = None
+    if show_events and clicked_pts:
+        p = clicked_pts[0]
+        raw = p.get("x", p.get("pointIndex"))
+        # resolve whatever the click reported into a timestamp
+        d_click = None
         try:
-            ci = int(ci)
+            d_click = pd.Timestamp(raw)
         except Exception:
-            ci = None
-        n_event_traces = sum(
-            1 for d, *_ in EVENTS if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max())
-        if ci is not None and ci >= len(fig.data) - n_event_traces:
-            title, what, impact = clicked[0]["customdata"][0][0], clicked[0]["customdata"][0][1], clicked[0]["customdata"][0][2]
-            with st.popover(f"📖  {title}", use_container_width=True):
-                st.markdown(f"**What happened.** {what}")
-                st.markdown(f"**Effect on the real exchange rate.** {impact}")
-                st.caption("Open the chart's menu and choose 'Deselect' to close this, "
-                           "or click the marker again.")
+            try:
+                d_click = sub.index[int(p.get("pointIndex", -1))]
+            except Exception:
+                d_click = None
+        if d_click is not None:
+            for d, title, what, impact in EVENTS:
+                if abs((pd.Timestamp(d + "-01") - d_click).days) <= 20:
+                    hit = (d, title, what, impact)
+                    break
+
+    if hit:
+        d, title, what, impact = hit
+        with st.container(border=True):
+            st.markdown(f"#### 📖 {title}  ·  {pd.Timestamp(d + '-01'):%B %Y}")
+            st.markdown(f"**What happened.** {what}")
+            st.markdown(f"**Effect on the real exchange rate.** {impact}")
+            st.caption("Click a different diamond to read another event. "
+                       "Untick 'Show event markers' to clear this.")
+
+    # Always-available fallback: a list of the events visible in this sample.
+    if show_events:
+        visible = [(d, t) for d, t, _w, _i in EVENTS
+                   if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max()]
+        if visible:
+            with st.expander("📜 Event notes for this sample", expanded=bool(hit)):
+                for d, t, w, i in EVENTS:
+                    if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max():
+                        st.markdown(f"**{t}** — {pd.Timestamp(d + '-01'):%B %Y}  \n{w}  \n*{i}*")
 
     m1, m2, m3 = st.columns(3)
     m1.metric("RER* (average RER)", f"{rer_star:,.4f}")
