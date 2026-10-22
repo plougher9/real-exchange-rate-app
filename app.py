@@ -77,16 +77,41 @@ CPI_KEY = "{}.CPI._T.IX.M"
 FX_KEY = "{}.XDC_USD.PA_RT.M"
 
 EVENTS = [
-    ("1985-09", "Plaza Accord"),
-    ("1992-09", "Black Wednesday (ERM crisis)"),
-    ("1997-07", "Asian financial crisis"),
-    ("1999-01", "Euro launched"),
-    ("2008-09", "Lehman collapse"),
-    ("2010-05", "Euro-area debt crisis"),
-    ("2015-01", "Swiss franc peg removed"),
-    ("2016-06", "Brexit referendum"),
-    ("2020-03", "COVID-19 pandemic"),
-    ("2022-02", "Russia invades Ukraine"),
+    ("1985-09", "Plaza Accord",
+     "The G5 agreed to let the US dollar fall after its sharp rise in the early 1980s.",
+     "The dollar depreciated through 1985-87, a real depreciation for the US against the "
+     "yen, mark and pound."),
+    ("1992-09", "Black Wednesday (ERM crisis)",
+     "Britain was forced out of the European Exchange Rate Mechanism after failing to keep "
+     "sterling above its floor.",
+     "Sterling fell sharply and the UK's Real Index dropped well below 100 within months."),
+    ("1997-07", "Asian financial crisis",
+     "The Thai baht peg broke and the crisis spread through East Asia.",
+     "Currencies across the region collapsed in nominal terms; real rates moved with them."),
+    ("1999-01", "Euro launched",
+     "Eleven currencies were locked together at fixed conversion rates and the euro appeared "
+     "for electronic payments.",
+     "Nominal volatility between members vanished; real rates within the euro area can no "
+     "longer adjust through the exchange rate."),
+    ("2008-09", "Lehman collapse",
+     "The bankruptcy of Lehman Brothers turned a credit crunch into a global financial crisis.",
+     "A flight to safe-haven currencies, especially the US dollar, drove large real swings."),
+    ("2010-05", "Euro-area debt crisis",
+     "Greece's bailout exposed fiscal weakness across the euro periphery.",
+     "The euro fell against the dollar; periphery members lost real competitiveness within "
+     "the currency union."),
+    ("2015-01", "Swiss franc peg removed",
+     "The Swiss National Bank abandoned its 1.20 floor against the euro without warning.",
+     "The franc jumped about 20% in minutes; a stark reminder that pegs are not permanent."),
+    ("2016-06", "Brexit referendum",
+     "The UK voted to leave the European Union.",
+     "Sterling fell sharply, a nominal depreciation that fed straight into the UK's real rate."),
+    ("2020-03", "COVID-19 pandemic",
+     "Global lockdowns and a scramble for dollars.",
+     "Emergency policy support, sharp inflation differences, and a strong dollar through 2022."),
+    ("2022-02", "Russia invades Ukraine",
+     "War in Europe and an energy shock.",
+     "European currencies weakened in real terms as energy import costs surged."),
 ]
 
 
@@ -232,6 +257,11 @@ with tab_pair:
     else:
         persp = f"{n1}"
     show_events = st.checkbox("Show event markers", value=True)
+    show_ppp = st.checkbox("Show long-run average line", value=False,
+                           help="A faint dot-dash line showing where the Real Index sits when it "
+                                "is measured against the FULL available history instead of your "
+                                "selected sample. The gap between it and 100 is the effect of your "
+                                "date choice on the benchmark.")
     cur1, cur2 = f"{n1} currency", f"{n2} currency"
 
     fig = make_subplots(specs=[[{"secondary_y": view == "Both"}]])
@@ -262,16 +292,52 @@ with tab_pair:
         fig.update_yaxes(title_text=f"S: {cur2} per {cur1}")
 
     if show_events:
-        for k, (d, text) in enumerate(EVENTS):
+        for d, title, what, impact in EVENTS:
             dt = pd.Timestamp(d + "-01")
             if sub.index.min() <= dt <= sub.index.max():
                 fig.add_shape(type="line", x0=dt, x1=dt, y0=0, y1=1, xref="x", yref="paper",
-                              line=dict(color="gray", width=1, dash="dash"))
-                fig.add_annotation(x=dt, y=1 - 0.07 * (k % 4), xref="x", yref="paper",
-                                   text=text, showarrow=False, xanchor="left",
-                                   font=dict(size=10, color="gray"))
+                              line=dict(color="rgba(120,120,120,.55)", width=1, dash="dot"))
+                # invisible clickable marker at the top of each line
+                fig.add_trace(go.Scatter(
+                    x=[dt], y=[1], yref="paper", mode="markers",
+                    marker=dict(size=13, color="rgba(184,137,43,.02)"),
+                    name=title, showlegend=False, hoverinfo="skip",
+                    customdata=[[title, what, impact]]))
+                fig.add_annotation(x=dt, y=1.02, yref="paper", xref="x", text="◆",
+                                   showarrow=False, font=dict(size=9, color=GOLD),
+                                   hovertext=f"<b>{title}</b> — click for details")
+
+    # ---- subtle long-run PPP benchmark (optional, off by default)
+    if show_ppp:
+        full = df.loc[months[0]:months[-1]]
+        _m = float(full["RER"].mean())
+        ppp_level = 100 * (_m / rer_star)
+        fig.add_hline(y=ppp_level, line=dict(color="rgba(90,90,90,.45)", width=1, dash="dot"),
+                      annotation_text=f"long-run average = {ppp_level:.0f}",
+                      annotation_position="top left",
+                      annotation_font=dict(size=10, color="rgba(90,90,90,.85)"))
     fig.update_layout(hovermode="x unified", height=520, legend=dict(orientation="h"))
-    st.plotly_chart(fig, use_container_width=True)
+    event_chart = st.plotly_chart(fig, use_container_width=True,
+                                  on_select="rerun", key="rer_chart",
+                                  selection_mode=("points",))
+
+    # ---- click a diamond to read the event history
+    clicked = (event_chart or {}).get("selection", {}).get("points", []) if isinstance(event_chart, dict) else []
+    if show_events and clicked:
+        ci = clicked[0].get("curve_number", clicked[0].get("curveNumber"))
+        try:
+            ci = int(ci)
+        except Exception:
+            ci = None
+        n_event_traces = sum(
+            1 for d, *_ in EVENTS if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max())
+        if ci is not None and ci >= len(fig.data) - n_event_traces:
+            title, what, impact = clicked[0]["customdata"][0][0], clicked[0]["customdata"][0][1], clicked[0]["customdata"][0][2]
+            with st.popover(f"📖  {title}", use_container_width=True):
+                st.markdown(f"**What happened.** {what}")
+                st.markdown(f"**Effect on the real exchange rate.** {impact}")
+                st.caption("Open the chart's menu and choose 'Deselect' to close this, "
+                           "or click the marker again.")
 
     m1, m2, m3 = st.columns(3)
     m1.metric("RER* (average RER)", f"{rer_star:,.4f}")
@@ -417,12 +483,13 @@ with tab_pair:
                     f"<b>{abs(gap_for_buyer):.1f}% {'less' if gap_for_buyer < 0 else 'more'}</b> "
                     f"in {n2} than it usually does over this sample.")
         else:
-            if gap_for_buyer < 0:
+            # Holding Country 2 currency: a LOWER cost than average is the good outcome.
+            if diff < 0:
                 tag, cls = "GOOD MOMENT", "vgood"
             else:
                 tag, cls = "BAD MOMENT", "vbad"
             line = (f"Holding {n2} currency, this {n1} priced item costs you "
-                    f"<b>{abs(gap_for_buyer):.1f}% {'less' if gap_for_buyer < 0 else 'more'}</b> "
+                    f"<b>{abs(diff):.1f}% {'less' if diff < 0 else 'more'}</b> "
                     f"than usual over this sample.")
 
         st.markdown(
