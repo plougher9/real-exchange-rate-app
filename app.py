@@ -67,22 +67,10 @@ div[data-baseweb="select"] *, div[data-baseweb="input"] input {{ color: {INK} !i
 .stDownloadButton button:hover {{ background: {GOLD}; color: {INK} !important; border-color: {INK}; }}
 div[data-testid="stDataFrame"] {{ border: 1px solid {GOLD}; }}
 .verdict {{ background: #fffdf5; border: 1px dashed {GREEN}; border-radius: 4px; padding: 12px 16px; }}
-/* Emoji fallback: scoped to the headings/lede only, so widget internals keep their own layout. */
-.hero h1, .hero .sub, h2, h3 {{
-  font-family: Georgia, 'Times New Roman', 'Segoe UI Emoji', 'Apple Color Emoji',
-               'Noto Color Emoji', serif;
-}}
-/* Expander header: give it room and stop inherited positioning from colliding with the label. */
+/* Expander: leave Streamlit's own layout alone. */
 div[data-testid="stExpander"] summary {{
-  font-family: Georgia, 'Times New Roman', serif;
-  padding: 10px 4px;
-  overflow: visible;
-}}
-div[data-testid="stExpander"] summary p,
-div[data-testid="stExpander"] summary span {{
-  font-family: Georgia, 'Times New Roman', serif;
-  position: static;
-  margin: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }}
 footer {{ visibility: hidden; }}
 </style>
@@ -323,7 +311,8 @@ with tab_pair:
         shown = [(d, t, w, i) for d, t, w, i in EVENTS
                  if sub.index.min() <= pd.Timestamp(d + "-01") <= sub.index.max()]
         if shown:
-            with st.expander(f"Event notes for this sample ({len(shown)} events)", expanded=False):
+            show_notes = st.checkbox(f"Show event notes for this sample ({len(shown)} events)")
+            if show_notes:
                 for d, t, w, i in shown:
                     st.markdown(f"**{t}** — {pd.Timestamp(d + '-01'):%B %Y}")
                     st.markdown(f"*What happened.* {w}")
