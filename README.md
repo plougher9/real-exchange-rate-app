@@ -13,11 +13,13 @@
 
 - Choose Country 1 and Country 2 from IMF countries plus the Euro area (IMF code G163). Data starts in January 1976 where available.
 - Interactive chart: Real, Nominal, or Both (dual axes). Nominal S is shown in actual currency units.
+- Real Index can be viewed from Country 1's side, Country 2's side, or both. Country 2's index is the mirror image of Country 1's, built from 1/RER and scaled to average 100.
+- A clearly marked 100 line shows the sample-average benchmark, with a shaded 90–110 band.
 - Event markers for major episodes (for example Black Wednesday, the Asian financial crisis, Brexit, COVID-19).
-- Over/undervalued gauge showing the latest Real Index against 100.
-- iPhone price comparison showing what a phone costs in Country 2 currency at today's rate and at the sample-average real rate. Prices are illustrative.
-- Rank view comparing Country 1 against all other countries.
-- CSV download of all observations and calculations for the selected sample.
+- Over/undervalued gauge naming which currency is overvalued or undervalued and by how much.
+- iPhone call: answer a ringing phone, receive an offer in Country 1 currency, and see the cost in Country 2 currency at today's rate and at the sample-average real rate. Prices are illustrative.
+- Rank view comparing Country 1 against all other countries, with the percentage over- or undervalued on each bar.
+- CSV downloads of all observations and calculations for the selected sample, plus a separate ranking CSV.
 
 ## Data
 
