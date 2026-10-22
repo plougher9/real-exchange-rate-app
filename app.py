@@ -71,7 +71,7 @@ footer {{ visibility: hidden; }}
 </style>
 """, unsafe_allow_html=True)
 
-BASE = "https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA"
+BASE = "[api.imf.org](https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA)"
 HEADERS = {"Accept": "text/csv"}
 CPI_KEY = "{}.CPI._T.IX.M"
 FX_KEY = "{}.XDC_USD.PA_RT.M"
@@ -211,26 +211,54 @@ sub["Real_Index"] = 100 * sub["RER"] / rer_star
 latest = sub.iloc[-1]
 latest_idx = float(latest["Real_Index"])
 
+import random
+
+# Country 2's view of the same real exchange rate is the inverse: 1/RER(t).
+inv = 1 / sub["RER"]
+sub["Real_Index_C2"] = 100 * inv / inv.mean()
+latest = sub.iloc[-1]
+latest_idx2 = float(latest["Real_Index_C2"])
+
 tab_pair, tab_rank = st.tabs(["Pair analysis", "Rank view"])
 
 # ---------------------------------------------------------------- pair tab
 with tab_pair:
     view = st.radio("Chart", ["Real", "Nominal", "Both"], horizontal=True)
+    if view in ("Real", "Both"):
+        persp = st.radio(
+            "Real Index shown from the point of view of",
+            [f"{n1}", f"{n2}", "Both currencies"], horizontal=True,
+            help=f"{n2}'s real index is the mirror image of {n1}'s: it is built from 1/RER(t) and "
+                 f"rescaled so its own average is 100. When {n1} looks overvalued, {n2} looks undervalued.")
+    else:
+        persp = f"{n1}"
     show_events = st.checkbox("Show event markers", value=True)
     cur1, cur2 = f"{n1} currency", f"{n2} currency"
 
     fig = make_subplots(specs=[[{"secondary_y": view == "Both"}]])
     if view in ("Real", "Both"):
-        fig.add_trace(go.Scatter(x=sub.index, y=sub["Real_Index"], name="Real Index (RER*=100)"),
-                      secondary_y=False)
+        if persp in (f"{n1}", "Both currencies"):
+            fig.add_trace(go.Scatter(x=sub.index, y=sub["Real_Index"],
+                                     name=f"{n1} real index (vs {n2})", line=dict(width=2.5)),
+                          secondary_y=False)
+        if persp in (f"{n2}", "Both currencies"):
+            fig.add_trace(go.Scatter(x=sub.index, y=sub["Real_Index_C2"],
+                                     name=f"{n2} real index (vs {n1})", line=dict(width=2.5, color=RUST)),
+                          secondary_y=False)
+        # clearly defined 100 reference line
+        fig.add_hline(y=100, line=dict(color="black", width=3), secondary_y=False,
+                      annotation_text="100 = sample average (fair-value benchmark)",
+                      annotation_position="bottom right",
+                      annotation_font=dict(size=12, color="black"))
+        fig.add_hrect(y0=90, y1=110, fillcolor=GREEN, opacity=0.07, line_width=0, secondary_y=False)
     if view in ("Nominal", "Both"):
         fig.add_trace(go.Scatter(x=sub.index, y=sub["S"], name=f"Nominal S ({cur2} per {cur1})",
-                                 line=dict(dash="dot")), secondary_y=(view == "Both"))
+                                 line=dict(dash="dot", color=GOLD)), secondary_y=(view == "Both"))
     if view == "Both":
-        fig.update_yaxes(title_text="Real Index", secondary_y=False)
+        fig.update_yaxes(title_text="Real Index (100 = average)", secondary_y=False)
         fig.update_yaxes(title_text=f"S: {cur2} per {cur1}", secondary_y=True)
     elif view == "Real":
-        fig.update_yaxes(title_text="Real Index")
+        fig.update_yaxes(title_text="Real Index (100 = average)")
     else:
         fig.update_yaxes(title_text=f"S: {cur2} per {cur1}")
 
@@ -241,8 +269,8 @@ with tab_pair:
                 fig.add_shape(type="line", x0=dt, x1=dt, y0=0, y1=1, xref="x", yref="paper",
                               line=dict(color="gray", width=1, dash="dash"))
                 fig.add_annotation(x=dt, y=1 - 0.07 * (k % 4), xref="x", yref="paper",
-                                   text=text, showarrow=False, textangle=-90 if False else 0,
-                                   xanchor="left", font=dict(size=10, color="gray"))
+                                   text=text, showarrow=False, xanchor="left",
+                                   font=dict(size=10, color="gray"))
     fig.update_layout(hovermode="x unified", height=520, legend=dict(orientation="h"))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -253,13 +281,19 @@ with tab_pair:
 
     # ---- gauge
     st.subheader("Over/undervalued gauge")
-    gap = latest_idx - 100
+    gap1 = latest_idx - 100
+    gap2 = latest_idx2 - 100
+
+    def word(g):
+        return "OVERVALUED" if g > 1 else ("UNDERVALUED" if g < -1 else "about FAIRLY valued")
+
     lo, hi = min(50, latest_idx - 10), max(150, latest_idx + 10)
     gauge = go.Figure(go.Indicator(
         mode="gauge+number+delta",
         value=latest_idx,
         delta={"reference": 100, "valueformat": ".1f"},
-        title={"text": f"Real Index, {latest.name:%b %Y}"},
+        title={"text": f"{n1} currency vs {n2} currency<br>"
+                       f"<span style='font-size:0.7em'>Real Index, {latest.name:%b %Y}</span>"},
         gauge={
             "axis": {"range": [lo, hi]},
             "bar": {"color": "black"},
@@ -270,57 +304,92 @@ with tab_pair:
             ],
             "threshold": {"line": {"color": RUST, "width": 4}, "value": 100},
         }))
-    gauge.update_layout(height=320, margin=dict(t=60, b=10))
+    gauge.update_layout(height=340, margin=dict(t=90, b=10))
     g1, g2 = st.columns([1, 1])
     g1.plotly_chart(gauge, use_container_width=True)
-    if gap > 1:
-        verdict = (f"The {n1} currency is **{gap:.1f}% stronger in real terms** than its average "
-                   f"against the {n2} currency over this sample: {n1} looks relatively expensive.")
-    elif gap < -1:
-        verdict = (f"The {n1} currency is **{-gap:.1f}% weaker in real terms** than its average "
-                   f"against the {n2} currency over this sample: {n1} looks relatively cheap.")
-    else:
-        verdict = f"The real exchange rate is close to its sample average (within 1%)."
+    verdict = (
+        f"<b>{n1} currency: {word(gap1)}</b> ({gap1:+.1f}% vs its sample average against {n2}).<br>"
+        f"<b>{n2} currency: {word(gap2)}</b> ({gap2:+.1f}% vs its sample average against {n1}).<br><br>"
+        f"<i>Overvalued</i> means the currency buys more goods abroad than usual (real appreciation); "
+        f"<i>undervalued</i> means it buys less. The two currencies are mirror images, so one is "
+        f"overvalued exactly when the other is undervalued."
+    )
     g2.markdown(f'<div class="verdict">{verdict}</div>', unsafe_allow_html=True)
-    g2.caption("Blue: below 90 · Green: 90–110 · Orange: above 110. "
+    g2.caption("Gauge colours: blue below 90 · green 90–110 · orange above 110. "
                "'Over/undervalued' is relative to the sample average RER*, not a measure of true "
                "equilibrium: changing the dates changes the benchmark.")
 
-    # ---- iPhone comparison
-    st.subheader("What does an iPhone cost?")
-    price1 = st.number_input(f"iPhone price in {n1} currency (illustrative, enter your own)",
-                             min_value=1.0, value=999.0, step=10.0)
+    # ---- iPhone call
+    st.subheader("📞 Incoming call: an iPhone offer")
     s_now = float(latest["S"])
     s_fair = float(rer_star * latest["P2"] / latest["P1"])  # S that would give RER = RER*
-    cost_now = price1 * s_now
-    cost_fair = price1 * s_fair
-    diff = (cost_now / cost_fair - 1) * 100
-    note = (f"{abs(diff):.1f}% {'more' if diff > 0 else 'less'} than at the average real rate"
-            if abs(diff) >= 0.05 else "the same as at the average real rate")
-    st.markdown(
-        f"""
-<div style="display:flex;justify-content:center;">
- <div style="width:260px;border:10px solid #1c1c1e;border-radius:42px;background:#fffdf5;outline:3px solid #b8892b;
-             padding:34px 18px 28px 18px;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.3);
-             color:#111;font-family:-apple-system,Helvetica,Arial,sans-serif;">
-  <div style="width:80px;height:20px;background:#1c1c1e;border-radius:12px;margin:-22px auto 18px;"></div>
-  <div style="font-size:42px;">📱</div>
-  <div style="font-size:13px;color:#555;">A phone priced at</div>
-  <div style="font-size:20px;font-weight:600;">{price1:,.0f} ({n1})</div>
-  <hr style="border:0;border-top:1px solid #ccc;margin:12px 0;">
-  <div style="font-size:13px;color:#555;">costs in {n2} at today's rate</div>
-  <div style="font-size:26px;font-weight:700;">{cost_now:,.2f}</div>
-  <div style="font-size:13px;color:#555;margin-top:10px;">at the sample-average real rate</div>
-  <div style="font-size:20px;font-weight:600;">{cost_fair:,.2f}</div>
-  <div style="margin-top:12px;font-size:13px;font-weight:600;color:{'#c0392b' if diff > 0 else '#1e8449'};">
-   {note}</div>
- </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-    st.caption(f"Amounts are in {n2} currency units, as of {latest.name:%b %Y}. The same phone price "
-               f"is assumed in {n1} currency; this illustrates the RER, not actual Apple pricing.")
+
+    if "call_state" not in st.session_state:
+        st.session_state.call_state = "ringing"
+    if "offer" not in st.session_state:
+        st.session_state.offer = random.choice(range(500, 1501, 50))
+
+    st.markdown("""
+<style>
+@keyframes ring { 0%,100%{transform:rotate(0)} 10%,30%,50%{transform:rotate(-4deg)}
+                  20%,40%,60%{transform:rotate(4deg)} 70%{transform:rotate(0)} }
+@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(46,204,113,.7)} 100%{box-shadow:0 0 0 22px rgba(46,204,113,0)} }
+.phone { width:270px; margin:0 auto; border:10px solid #1c1c1e; border-radius:44px; outline:3px solid #b8892b;
+  padding:34px 18px 26px; text-align:center; box-shadow:0 6px 18px rgba(0,0,0,.35);
+  font-family:-apple-system,Helvetica,Arial,sans-serif; }
+.phone.ring { background:linear-gradient(180deg,#2c3e50,#111); color:#fff; animation:ring 1.2s infinite; }
+.phone.live { background:#fffdf5; color:#111; }
+.notch { width:80px; height:20px; background:#1c1c1e; border-radius:12px; margin:-22px auto 16px; }
+.avatar { width:74px; height:74px; border-radius:50%; background:#8e8e93; margin:8px auto; font-size:40px;
+  line-height:74px; animation:pulse 1.3s infinite; }
+</style>
+""", unsafe_allow_html=True)
+
+    if st.session_state.call_state == "ringing":
+        st.markdown(
+            """
+<div class="phone ring"><div class="notch"></div>
+  <div style="font-size:13px;opacity:.7;">incoming call…</div>
+  <div class="avatar">🍎</div>
+  <div style="font-size:24px;font-weight:600;">iPhone Dealer</div>
+  <div style="font-size:13px;opacity:.7;margin-top:4px;">I have an offer for you</div>
+</div>""", unsafe_allow_html=True)
+        b1, b2, b3, b4 = st.columns([1, 1, 1, 1])
+        if b2.button("📞 Answer", use_container_width=True, type="primary"):
+            st.session_state.call_state = "answered"
+            st.rerun()
+        if b3.button("❌ Decline", use_container_width=True):
+            st.session_state.offer = random.choice(range(500, 1501, 50))
+            st.toast("Declined. The dealer will call back with another offer!")
+    else:
+        st.markdown(
+            f"""
+<div class="phone live"><div class="notch"></div>
+  <div style="font-size:12px;color:#34c759;font-weight:600;">● Call connected</div>
+  <div style="font-size:15px;margin-top:6px;">“I'll sell you an iPhone for</div>
+  <div style="font-size:30px;font-weight:700;">{st.session_state.offer:,.0f}</div>
+  <div style="font-size:13px;color:#555;">in {n1} currency (base currency)”</div>
+</div>""", unsafe_allow_html=True)
+        st.write("")
+        o1, o2 = st.columns([2, 1])
+        offer = o1.slider(f"Offer price in {n1} currency (base)", 100, 3000,
+                          int(st.session_state.offer), step=10)
+        if o2.button("📵 Hang up / new call", use_container_width=True):
+            st.session_state.call_state = "ringing"
+            st.session_state.offer = random.choice(range(500, 1501, 50))
+            st.rerun()
+        cost_now = offer * s_now
+        cost_fair = offer * s_fair
+        diff = (cost_now / cost_fair - 1) * 100
+        c_a, c_b, c_c = st.columns(3)
+        c_a.metric(f"Offer in {n1} currency", f"{offer:,.0f}")
+        c_b.metric(f"Cost in {n2} currency (today's rate)", f"{cost_now:,.2f}")
+        c_c.metric(f"Cost in {n2} currency (avg real rate)", f"{cost_fair:,.2f}",
+                   delta=f"{diff:+.1f}% today vs average", delta_color="inverse")
+        st.caption(
+            f"Converted with S = {s_now:,.4f} {n2} per {n1} (latest month, {latest.name:%b %Y}). "
+            f"The 'average real rate' is the exchange rate that would make the RER equal its sample "
+            f"average, S = {s_fair:,.4f}. Prices are illustrative, not actual Apple pricing.")
 
     # ---- table + CSV
     out = sub.reset_index().rename(columns={"index": "date"})
@@ -328,7 +397,7 @@ with tab_pair:
     out = out.rename(columns={
         "P1": f"CPI_{n1}", "P2": f"CPI_{n2}",
         "X1_per_USD": f"{n1}_LCU_per_USD", "X2_per_USD": f"{n2}_LCU_per_USD",
-        "S": "S_C2_per_C1"})
+        "S": "S_C2_per_C1", "Real_Index": f"Real_Index_{n1}", "Real_Index_C2": f"Real_Index_{n2}"})
     st.dataframe(out, use_container_width=True)
     st.download_button("Download CSV", out.to_csv(index=False).encode(),
                        file_name="rer_data.csv", mime="text/csv")
@@ -336,10 +405,18 @@ with tab_pair:
 # ---------------------------------------------------------------- rank tab
 with tab_rank:
     st.markdown(
-        f"Each bar compares **{n1}** with one other country: the latest Real Index in the selected "
-        f"sample ({s_date:%Y-%m} to {e_date:%Y-%m}), where the sample-average real rate for that pair "
-        f"= 100. Above 100 means the {n1} currency is stronger in real terms than its average "
-        f"against that country; below 100 means weaker."
+        f"Each bar compares the **{n1} currency** with one other country, using the latest month in "
+        f"the selected sample ({s_date:%Y-%m} to {e_date:%Y-%m}). The pair's own sample-average "
+        f"real rate is set to 100, and the label on each bar is the **% overvalued (+) or "
+        f"undervalued (−)** versus that average."
+    )
+    st.info(
+        f"**Most overvalued:** the {n1} currency is furthest ABOVE its own average real rate against "
+        f"that country. It is unusually strong in real terms there (goods in that country look cheap "
+        f"to {n1} buyers).\n\n"
+        f"**Most undervalued:** the {n1} currency is furthest BELOW its own average real rate against "
+        f"that country. It is unusually weak in real terms there (goods in that country look "
+        f"expensive to {n1} buyers)."
     )
     rows = []
     for j in isos:
@@ -348,7 +425,9 @@ with tab_rank:
         d = build_pair(i1, j).loc[s_date:e_date]
         if len(d) < 12:
             continue
-        rows.append({"Country": label[j], "Real Index (latest)": 100 * d["RER"].iloc[-1] / d["RER"].mean(),
+        idx = 100 * d["RER"].iloc[-1] / d["RER"].mean()
+        rows.append({"Country": label[j], "Real Index (latest)": idx,
+                     "% over/(under)valued": idx - 100,
                      "Latest month": d.index[-1].strftime("%Y-%m"), "Valid months": len(d)})
     if not rows:
         st.info("Not enough overlapping data in this sample period to rank countries.")
@@ -356,15 +435,23 @@ with tab_rank:
         rk = pd.DataFrame(rows).sort_values("Real Index (latest)", ascending=False).reset_index(drop=True)
         rk.index = rk.index + 1
         top_n = st.slider("Countries to show in chart", 5, min(60, len(rk)), min(20, len(rk)))
-        order = st.radio("Show", ["Highest (strongest vs them)", "Lowest (weakest vs them)"], horizontal=True)
-        chart_df = rk.head(top_n) if order.startswith("Highest") else rk.tail(top_n).iloc[::-1]
+        order = st.radio("Show", [f"Most overvalued ({n1} strongest)", f"Most undervalued ({n1} weakest)"],
+                         horizontal=True)
+        chart_df = rk.head(top_n) if order.startswith("Most overvalued") else rk.tail(top_n).iloc[::-1]
         colors = [GOLD if v > 100 else GREEN for v in chart_df["Real Index (latest)"]]
-        bar = go.Figure(go.Bar(x=chart_df["Real Index (latest)"], y=chart_df["Country"],
-                               orientation="h", marker_color=colors))
-        bar.add_vline(x=100, line_dash="dash", line_color="black")
-        bar.update_layout(height=max(350, 24 * top_n), yaxis=dict(autorange="reversed"),
-                          xaxis_title="Real Index (pair average = 100)", margin=dict(l=10, r=10))
+        bar = go.Figure(go.Bar(
+            x=chart_df["Real Index (latest)"], y=chart_df["Country"], orientation="h",
+            marker_color=colors,
+            text=[f"{v:+.1f}%" for v in chart_df["% over/(under)valued"]],
+            textposition="outside", cliponaxis=False,
+            hovertemplate="%{y}<br>Real Index %{x:.1f}<br>%{text}<extra></extra>"))
+        bar.add_vline(x=100, line=dict(color="black", width=3),
+                      annotation_text="100 = average", annotation_position="top")
+        bar.update_layout(height=max(350, 26 * top_n), yaxis=dict(autorange="reversed"),
+                          xaxis_title=f"Real Index of {n1} currency (pair average = 100)",
+                          margin=dict(l=10, r=60))
         st.plotly_chart(bar, use_container_width=True)
         st.dataframe(rk, use_container_width=True)
         st.download_button("Download ranking CSV", rk.to_csv().encode(),
                            file_name="rer_ranking.csv", mime="text/csv")
+
