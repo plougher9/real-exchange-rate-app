@@ -84,8 +84,11 @@ div[data-testid="stExpander"] summary span {{
   position: static;
   margin: 0;
 }}
+footer {{ visibility: hidden; }}
+</style>
+""", unsafe_allow_html=True)
 
-BASE = "https" + "://" + "api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA"
+BASE = "https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA"
 HEADERS = {"Accept": "text/csv"}
 CPI_KEY = "{}.CPI._T.IX.M"
 FX_KEY = "{}.XDC_USD.PA_RT.M"
@@ -273,6 +276,7 @@ with tab_pair:
         persp = f"{n1}"
     show_events = st.checkbox("Show event markers", value=True)
     cur1, cur2 = f"{n1} currency", f"{n2} currency"
+
     fig = make_subplots(specs=[[{"secondary_y": view == "Both"}]])
     if view in ("Real", "Both"):
         if persp in (f"{n1}", "Both currencies"):
@@ -495,7 +499,8 @@ predict future moves. Change the sample dates and this figure changes.</span>
             f"Converted with S = {s_now:,.4f} {n2} per {n1} (latest month, {latest.name:%b %Y}). "
             f"The 'average real rate' is the exchange rate that would make the RER equal its sample "
             f"average, S = {s_fair:,.4f}. Prices are illustrative, not actual Apple pricing.")
-    # ---- table + CSV
+
+# ---- table + CSV
     out = sub.reset_index().rename(columns={"index": "date"})
     out["date"] = out["date"].dt.strftime("%Y-%m")
     out = out.rename(columns={
