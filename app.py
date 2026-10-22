@@ -297,14 +297,20 @@ with tab_pair:
             if sub.index.min() <= dt <= sub.index.max():
                 fig.add_shape(type="line", x0=dt, x1=dt, y0=0, y1=1, xref="x", yref="paper",
                               line=dict(color="rgba(120,120,120,.55)", width=1, dash="dot"))
-                # invisible clickable marker at the top of each line
+                # clickable marker at the top of each line.
+                # NOTE: a Scatter cannot carry yref="paper" (that is for shapes/annotations).
+                # Plot the marker on the data axis, at the top of the visible y-range.
+                _yv = sub["Real_Index"].max()
+                _ylim = (_yv - sub["Real_Index"].min()) * 0.06 or 1
                 fig.add_trace(go.Scatter(
-                    x=[dt], y=[1], yref="paper", mode="markers",
-                    marker=dict(size=13, color="rgba(184,137,43,.02)"),
-                    name=title, showlegend=False, hoverinfo="skip",
+                    x=[dt], y=[_yv + _ylim], mode="markers",
+                    marker=dict(size=15, color="rgba(184,137,43,.35)",
+                                line=dict(color=GOLD, width=1)),
+                    name=title, showlegend=False,
+                    hovertemplate=f"<b>{title}</b><br>click for details<extra></extra>",
                     customdata=[[title, what, impact]]))
-                fig.add_annotation(x=dt, y=1.02, yref="paper", xref="x", text="◆",
-                                   showarrow=False, font=dict(size=9, color=GOLD),
+                fig.add_annotation(x=dt, y=1.0, yref="paper", xref="x", text="◆",
+                                   showarrow=False, font=dict(size=10, color=GOLD),
                                    hovertext=f"<b>{title}</b> — click for details")
 
     # ---- subtle long-run PPP benchmark (optional, off by default)
@@ -316,7 +322,8 @@ with tab_pair:
                       annotation_text=f"long-run average = {ppp_level:.0f}",
                       annotation_position="top left",
                       annotation_font=dict(size=10, color="rgba(90,90,90,.85)"))
-    fig.update_layout(hovermode="x unified", height=520, legend=dict(orientation="h"))
+    fig.update_layout(hovermode="x unified", height=520, legend=dict(orientation="h"),
+                      margin=dict(t=40))
     event_chart = st.plotly_chart(fig, use_container_width=True,
                                   on_select="rerun", key="rer_chart",
                                   selection_mode=("points",))
