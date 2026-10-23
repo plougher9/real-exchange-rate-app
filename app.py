@@ -185,15 +185,16 @@ st.markdown(
 <div class="hero">
   <h1>💱 The Real Exchange Ledger</h1>
   <div class="sub">Struck from IMF data: prices, rates, and the real value between them.</div>
-  <div class="formula">RER(t) = S(t) × P1(t) / P2(t)</div>
+  <div class="formula">An application of RER by Patrick Loughery</div>
 </div>
 """,
     unsafe_allow_html=True,
 )
 st.caption(
-    "S(t) = units of Country 2 currency per 1 unit of Country 1 currency. "
-    "Data: IMF monthly CPI and period-average exchange rates."
+    "S(t) = units of Country 2 currency per 1 unit of Country 1 currency, so "
+    "RER(t) = S(t) × P1(t) / P2(t). Data: IMF monthly CPI and period-average exchange rates."
 )
+
 
 try:
     with st.spinner("Downloading IMF data..."):
@@ -253,25 +254,33 @@ tab_pair, tab_rank = st.tabs(["Pair analysis", "Rank view"])
 
 # ---------------------------------------------------------------- pair tab
 with tab_pair:
-    view = st.radio("Chart", ["Real", "Nominal", "Both"], horizontal=True)
-    if view in ("Real", "Both"):
+    view = st.radio(
+        "Chart view",
+        ["Real index (RER* = 100)", "Nominal exchange rate S(t)", "Both (separate axes)"],
+        horizontal=True,
+        help="Real index: 100 x RER(t) / RER*, rescaled to average 100 over your sample. "
+             "Nominal: S(t) in actual currency units, not rescaled. "
+             "Both: the real index on the left axis and S(t) on the right.")
+    if view.startswith("Real") or view.startswith("Both"):
         persp = st.radio(
-            "Real Index shown from the point of view of",
-            [f"{n1}", f"{n2}", "Both currencies"], horizontal=True,
-            help=f"{n2}'s real index is the mirror image of {n1}'s: it is built from 1/RER(t) and "
-                 f"rescaled so its own average is 100. When {n1} looks overvalued, {n2} looks undervalued.")
+            "Show the real index for",
+            [f"{n1} (the RER series)", f"{n2} (mirror image)", "Both currencies"],
+            horizontal=True,
+            help=f"{n2}'s index is the mirror image of {n1}'s: it is built from 1/RER(t) and rescaled "
+                 f"so its own average is 100. When {n1} looks overvalued, {n2} looks undervalued.")
     else:
         persp = f"{n1}"
     show_events = st.checkbox("Show event markers", value=True)
     cur1, cur2 = f"{n1} currency", f"{n2} currency"
 
-    fig = make_subplots(specs=[[{"secondary_y": view == "Both"}]])
-    if view in ("Real", "Both"):
-        if persp in (f"{n1}", "Both currencies"):
+    both_mode = view.startswith("Both")
+    fig = make_subplots(specs=[[{"secondary_y": both_mode}]])
+    if view.startswith("Real") or view.startswith("Both"):
+        if persp.startswith(f"{n1}") or persp == "Both currencies":
             fig.add_trace(go.Scatter(x=sub.index, y=sub["Real_Index"],
                                      name=f"{n1} real index (vs {n2})", line=dict(width=2.5)),
                           secondary_y=False)
-        if persp in (f"{n2}", "Both currencies"):
+        if persp.startswith(f"{n2}") or persp == "Both currencies":
             fig.add_trace(go.Scatter(x=sub.index, y=sub["Real_Index_C2"],
                                      name=f"{n2} real index (vs {n1})", line=dict(width=2.5, color=RUST)),
                           secondary_y=False)
@@ -281,16 +290,27 @@ with tab_pair:
                       annotation_position="bottom right",
                       annotation_font=dict(size=12, color="black"))
         fig.add_hrect(y0=90, y1=110, fillcolor=GREEN, opacity=0.07, line_width=0, secondary_y=False)
-    if view in ("Nominal", "Both"):
-        fig.add_trace(go.Scatter(x=sub.index, y=sub["S"], name=f"Nominal S ({cur2} per {cur1})",
-                                 line=dict(dash="dot", color=GOLD)), secondary_y=(view == "Both"))
-    if view == "Both":
-        fig.update_yaxes(title_text="Real Index (100 = average)", secondary_y=False)
-        fig.update_yaxes(title_text=f"S: {cur2} per {cur1}", secondary_y=True)
-    elif view == "Real":
-        fig.update_yaxes(title_text="Real Index (100 = average)")
+    if view.startswith("Nominal") or both_mode:
+        fig.add_trace(go.Scatter(x=sub.index, y=sub["S"], name=f"Nominal S — {cur2} per 1 {cur1}",
+                                 line=dict(dash="dot", color=GOLD)), secondary_y=both_mode)
+    real_axis = f"Real index of {n1} currency<br>(sample average = 100, rescaled)"
+    nom_axis = f"Nominal S(t)<br>({cur2} per 1 {cur1}, actual units)"
+    if both_mode:
+        fig.update_yaxes(title_text=real_axis, secondary_y=False)
+        fig.update_yaxes(title_text=nom_axis, secondary_y=True)
+    elif view.startswith("Real"):
+        fig.update_yaxes(title_text=real_axis)
     else:
-        fig.update_yaxes(title_text=f"S: {cur2} per {cur1}")
+        fig.update_yaxes(title_text=nom_axis)
+
+    fig.update_xaxes(title_text="Month")
+    fig.update_layout(
+        title=dict(
+            text=(f"<b>{n1} vs {n2}</b> — {sub.index.min():%b %Y} to {sub.index.max():%b %Y}"
+                  f"<br><sup>RER(t) = S(t) x P1(t) / P2(t) &nbsp;|&nbsp; RER* = {rer_star:,.4f}"
+                  f" &nbsp;|&nbsp; Real index = 100 x RER(t) / RER*</sup>"),
+            x=0.5, xanchor="center", font=dict(size=15)),
+        margin=dict(t=90, b=40))
 
     if show_events:
         for k, (d, title, what, impact) in enumerate(EVENTS):
