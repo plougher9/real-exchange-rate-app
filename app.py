@@ -293,7 +293,15 @@ with tab_pair:
     if view.startswith("Nominal") or both_mode:
         fig.add_trace(go.Scatter(x=sub.index, y=sub["S"], name=f"Nominal S — {cur2} per 1 {cur1}",
                                  line=dict(dash="dot", color=GOLD)), secondary_y=both_mode)
-    real_axis = f"Real index of {n1} currency<br>(sample average = 100, rescaled)"
+    # The primary axis carries whichever real index is displayed. Country 1's index is the
+    # RER series; Country 2's is its mirror image from 1/RER. In "Both currencies" mode two
+    # lines share the axis, so it is labelled generically.
+    if persp == "Both currencies":
+        real_axis = "Real index — both currencies<br>(each rescaled to its own sample average = 100)"
+    elif persp.startswith(f"{n2}"):
+        real_axis = f"Real index of {n2} currency<br>(mirror image, sample average = 100)"
+    else:
+        real_axis = f"Real index of {n1} currency<br>(RER series, sample average = 100)"
     nom_axis = f"Nominal S(t)<br>({cur2} per 1 {cur1}, actual units)"
     if both_mode:
         fig.update_yaxes(title_text=real_axis, secondary_y=False)
