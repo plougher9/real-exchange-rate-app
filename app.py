@@ -184,7 +184,7 @@ st.markdown(
     """
 <div class="hero">
   <h1>💱 The Real Exchange Ledger</h1>
-  <div class="sub">What is a currency really worth? Prices, not just rates, tell the story.</div>
+  <div class="sub">Struck from IMF data: prices, rates, and the real value between them.</div>
   <div class="formula">RER(t) = S(t) × P1(t) / P2(t)</div>
 </div>
 """,
